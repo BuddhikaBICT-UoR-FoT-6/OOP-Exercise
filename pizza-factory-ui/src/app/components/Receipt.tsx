@@ -109,8 +109,7 @@ export default function Receipt({ order }: Props) {
                 <hr className="divider" />
 
                 <div style={{ textAlign: "center", color: "var(--text-faint)", fontSize: "0.8rem" }}>
-                    <p>Thank you for your order! 🍕</p>
-                    <p>Built with OOP &amp; Builder Pattern in .NET 10</p>
+                    <p>Thank you for your order!</p>
                 </div>
             </div>
 
