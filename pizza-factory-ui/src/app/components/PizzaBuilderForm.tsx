@@ -20,6 +20,7 @@ export default function PizzaBuilderForm({ orderId, onPizzaAdded, onOrderExpired
     const [error, setError] = useState<string | null>(null);
 
     const handlePreset = (preset: Preset) => {
+        if (!size) setSize("Medium"); // Auto-select a size so they don't get an error
         setToppings(
             preset.toppings.map((t) => ({
                 type: t.type as ToppingRequest["type"],
