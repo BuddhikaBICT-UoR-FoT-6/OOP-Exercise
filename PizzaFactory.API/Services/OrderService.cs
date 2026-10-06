@@ -1,81 +1,166 @@
+using Microsoft.EntityFrameworkCore;
+using PizzaFactory.API.Data;
+using PizzaFactory.API.Data.Entities;
 using PizzaFactory.API.DTOs.Requests;
 using PizzaFactory.API.DTOs.Responses;
 using PizzaFactory.Core.Builder;
 using PizzaFactory.Core.Models;
+using PF = PizzaFactory.Core.Factory.PizzaFactory;
+using TF = PizzaFactory.Core.Factory.ToppingFactory;
 
 namespace PizzaFactory.API.Services;
 
 public class OrderService : IOrderService
 {
-    private readonly Dictionary<Guid, Order> _orders = new();
+    private readonly AppDbContext _db;
 
-    public Guid CreateOrder(string? customerName)
+    public OrderService(AppDbContext db)
     {
-        var id = Guid.NewGuid();
-        _orders[id] = new Order(customerName);
-        return id;
+        _db = db;
     }
 
-    public void AddPizza(Guid orderId, AddPizzaRequest request)
+    // ── Create Order ──────────────────────────────────────────────────────────
+    public async Task<Guid> CreateOrderAsync(string? customerName)
     {
-        var order = GetOrderOrThrow(orderId);
+        var order = new OrderEntity
+        {
+            Id = Guid.NewGuid(),
+            CustomerName = customerName,
+            DiscountPercent = 0
+        };
 
+        _db.Orders.Add(order);
+        await _db.SaveChangesAsync();
+        return order.Id;
+    }
+
+    // ── Add Pizza ─────────────────────────────────────────────────────────────
+    public async Task AddPizzaAsync(Guid orderId, AddPizzaRequest request)
+    {
+        var order = await GetEntityOrThrowAsync(orderId);
+
+        // Use PizzaBuilder to validate the request (domain logic stays in Core)
         var builder = new PizzaBuilder();
         builder.WithSize(request.Size);
-
         foreach (var t in request.Toppings)
             builder.AddTopping(t.Type, t.Name);
+        builder.Build(); // validates — throws if invalid
 
-        order.AddPizza(builder.Build());
+        // Persist as entity
+        var pizzaEntity = new PizzaEntity
+        {
+            Id = Guid.NewGuid(),
+            OrderId = orderId,
+            Size = request.Size.ToString(),
+            Toppings = request.Toppings.Select(t => new ToppingEntity
+            {
+                Id = Guid.NewGuid(),
+                Name = t.Name,
+                Type = t.Type.ToString(),
+                Cost = 2.00m
+            }).ToList()
+        };
+
+        _db.Pizzas.Add(pizzaEntity);
+        await _db.SaveChangesAsync();
     }
 
-    public void ApplyCoupon(Guid orderId, ApplyCouponRequest request)
+    // ── Apply Coupon ──────────────────────────────────────────────────────────
+    public async Task ApplyCouponAsync(Guid orderId, ApplyCouponRequest request)
     {
-        var order = GetOrderOrThrow(orderId);
-        order.ApplyCoupon(request.CouponCode, request.DiscountPercent);
+        var order = await GetEntityOrThrowAsync(orderId);
+        order.CouponCode = request.CouponCode;
+        order.DiscountPercent = request.DiscountPercent;
+        await _db.SaveChangesAsync();
     }
 
-    public OrderResponse GetOrder(Guid orderId) =>
-        MapToResponse(orderId, GetOrderOrThrow(orderId));
-
-    public OrderResponse Checkout(Guid orderId) =>
-        MapToResponse(orderId, GetOrderOrThrow(orderId));
-
-    // ── Private helpers ────────────────────────────────────────────────────
-
-    private Order GetOrderOrThrow(Guid orderId)
+    // ── Get Order ─────────────────────────────────────────────────────────────
+    public async Task<OrderResponse> GetOrderAsync(Guid orderId)
     {
-        if (!_orders.TryGetValue(orderId, out var order))
+        var entity = await GetEntityWithDetailsAsync(orderId);
+        return MapToResponse(orderId, entity);
+    }
+
+    // ── Checkout ──────────────────────────────────────────────────────────────
+    public async Task<OrderResponse> CheckoutAsync(Guid orderId)
+    {
+        var entity = await GetEntityWithDetailsAsync(orderId);
+        return MapToResponse(orderId, entity);
+    }
+
+    // ── Private Helpers ───────────────────────────────────────────────────────
+
+    private async Task<OrderEntity> GetEntityOrThrowAsync(Guid orderId)
+    {
+        var order = await _db.Orders.FindAsync(orderId);
+        if (order is null)
             throw new KeyNotFoundException($"Order {orderId} not found.");
         return order;
     }
 
-    private static OrderResponse MapToResponse(Guid id, Order order) =>
-        new(
-            OrderId:        id,
-            CustomerName:   order.CustomerName,
-            Pizzas:         order.Pizzas.Select(MapPizza).ToList(),
-            Subtotal:       order.Subtotal(),
-            CouponCode:     order.CouponCode,
-            DiscountPercent:order.DiscountPercent,
-            Discount:       order.Discount(),
-            Total:          order.Total(),
-            Receipt:        order.PrintReceipt()
-        );
-
-    private static PizzaResponse MapPizza(Pizza pizza)
+    private async Task<OrderEntity> GetEntityWithDetailsAsync(Guid orderId)
     {
-        var toppingResponses = pizza.Toppings
-            .Select(t => new ToppingResponse(t.Name, t.Type.ToString(), t.Cost))
-            .ToList();
+        var order = await _db.Orders
+            .Include(o => o.Pizzas)
+                .ThenInclude(p => p.Toppings)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
 
-        return new PizzaResponse(
-            Size:         pizza.Size.ToString(),
-            Toppings:     toppingResponses,
-            BasePrice:    pizza.BasePrice,
-            ToppingsCost: pizza.Toppings.Count * 2.00m,
-            TotalCost:    pizza.Cost(),
-            Description:  pizza.Describe()
+        if (order is null)
+            throw new KeyNotFoundException($"Order {orderId} not found.");
+        return order;
+    }
+
+    /// <summary>
+    /// Reconstructs domain Order from entity data so we can reuse
+    /// domain logic (Cost(), PrintReceipt()) without duplicating it.
+    /// </summary>
+    private static Order ReconstructDomainOrder(OrderEntity entity)
+    {
+        var domainOrder = new Order(entity.CustomerName);
+
+        if (entity.CouponCode is not null)
+            domainOrder.ApplyCoupon(entity.CouponCode, entity.DiscountPercent);
+
+        foreach (var pizzaEntity in entity.Pizzas)
+        {
+            var size = Enum.Parse<PizzaSize>(pizzaEntity.Size);
+            var builder = new PizzaBuilder();
+            builder.WithSize(size);
+
+            foreach (var t in pizzaEntity.Toppings)
+                builder.AddTopping(Enum.Parse<ToppingType>(t.Type), t.Name);
+
+            domainOrder.AddPizza(builder.Build());
+        }
+
+        return domainOrder;
+    }
+
+    private static OrderResponse MapToResponse(Guid id, OrderEntity entity)
+    {
+        // Reconstruct domain object to reuse Cost() and PrintReceipt()
+        var domainOrder = ReconstructDomainOrder(entity);
+
+        var pizzaResponses = entity.Pizzas.Zip(domainOrder.Pizzas, (e, d) =>
+            new PizzaResponse(
+                Size:         e.Size,
+                Toppings:     e.Toppings.Select(t => new ToppingResponse(t.Name, t.Type, t.Cost)).ToList(),
+                BasePrice:    d.BasePrice,
+                ToppingsCost: e.Toppings.Count * 2.00m,
+                TotalCost:    d.Cost(),
+                Description:  d.Describe()
+            )).ToList();
+
+        return new OrderResponse(
+            OrderId:         id,
+            CustomerName:    entity.CustomerName,
+            Pizzas:          pizzaResponses,
+            Subtotal:        domainOrder.Subtotal(),
+            CouponCode:      entity.CouponCode,
+            DiscountPercent: entity.DiscountPercent,
+            Discount:        domainOrder.Discount(),
+            Total:           domainOrder.Total(),
+            Receipt:         domainOrder.PrintReceipt()
         );
     }
 }

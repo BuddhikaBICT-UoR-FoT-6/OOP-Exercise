@@ -1,26 +1,35 @@
+using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
+using PizzaFactory.API.Data;
 using PizzaFactory.API.Services;
 
-var builder = WebApplication.CreateBuilder(args); // Creates a WebApplicationBuilder 
-// instance which is the entry point of the application.
+var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddControllers(); // Adds controller services to the 
-// dependency injection container.
-builder.Services.AddEndpointsApiExplorer(); // Adds endpoint API explorer services 
-// to the dependency injection container.
-builder.Services.AddSwaggerGen(c => // Adds Swagger generation services to the 
-// dependency injection container.
+// ── Services ──────────────────────────────────────────────────────────────────
+
+// JsonStringEnumConverter allows the API to accept enum values as strings
+// (e.g. "Small", "Cheese") instead of integers.
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
 {
-    // basic configuration for Swagger 
     c.SwaggerDoc("v1", new() { Title = "Pizza Factory API", Version = "v1" });
 });
 
-// singleton tells the application to use only one instance of the OrderService
-// throughout the application's lifetime. This is a common pattern for services
-// that manage state or resources.
-builder.Services.AddSingleton<IOrderService, OrderService>();
+// ── MySQL via Entity Framework Core ───────────────────────────────────────────
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-// adding a CORS policy to allow the Next.js application to access the API.
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+
+// Scoped (not Singleton) because DbContext is scoped per request
+builder.Services.AddScoped<IOrderService, OrderService>();
+
+// ── CORS ──────────────────────────────────────────────────────────────────────
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowNextJs", policy =>
@@ -31,10 +40,16 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Builds the WebApplication instance and configures the middleware pipeline.
+// ── App / Middleware ──────────────────────────────────────────────────────────
 var app = builder.Build();
 
-// enable the Swagger UI at the /swagger endpoint.
+// Auto-apply pending migrations on startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
+
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -42,7 +57,7 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "swagger";
 });
 
-app.UseCors("AllowNextJs"); // Enables the CORS policy
-app.MapControllers(); // Maps controller routes
+app.UseCors("AllowNextJs");
+app.MapControllers();
 
 app.Run();

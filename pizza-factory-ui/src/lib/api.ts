@@ -12,7 +12,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
     if (!res.ok) {
         // Catches any JSON parsing errors.
         const error = await res.json().catch(() => ({ message: res.statusText }));
-        throw new Error(error.message ?? "API request failed");
+        throw new Error(`${res.status}: ${error.message ?? res.statusText}`);
     }
     if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;

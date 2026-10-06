@@ -10,9 +10,10 @@ import PresetSelector from "./PresetSelector";
 interface Props {
     orderId: string;
     onPizzaAdded: () => void;
+    onOrderExpired: () => void;
 }
 
-export default function PizzaBuilderForm({ orderId, onPizzaAdded }: Props) {
+export default function PizzaBuilderForm({ orderId, onPizzaAdded, onOrderExpired }: Props) {
     const [size, setSize] = useState<PizzaSize | null>(null);
     const [toppings, setToppings] = useState<ToppingRequest[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,7 +38,13 @@ export default function PizzaBuilderForm({ orderId, onPizzaAdded }: Props) {
             setToppings([]);
             onPizzaAdded();
         } catch (e: unknown) {
-            setError((e as Error).message);
+            const msg = (e as Error).message;
+            // Order was wiped by an API restart — silently re-create it
+            if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+                onOrderExpired();
+            } else {
+                setError(msg);
+            }
         } finally {
             setIsSubmitting(false);
         }

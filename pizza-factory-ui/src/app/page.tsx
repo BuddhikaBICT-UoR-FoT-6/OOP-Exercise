@@ -28,6 +28,13 @@ export default function HomePage() {
     setOrder(data);
   };
 
+  // Silently re-create the order when the API restarts and wipes in-memory state
+  const recreateOrder = async () => {
+    const data = await createOrder(customerName || undefined);
+    setOrderId(data.orderId);
+    setOrder(null); // clear stale summary
+  };
+
   const handleCheckout = () => {
     if (!orderId) return;
     setIsCheckingOut(true);
@@ -89,7 +96,11 @@ export default function HomePage() {
       >
         {/* Left: Builder */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <PizzaBuilderForm orderId={orderId!} onPizzaAdded={refreshOrder} />
+          <PizzaBuilderForm
+            orderId={orderId!}
+            onPizzaAdded={refreshOrder}
+            onOrderExpired={recreateOrder}
+          />
           <CouponInput orderId={orderId!} onApplied={refreshOrder} />
         </div>
 

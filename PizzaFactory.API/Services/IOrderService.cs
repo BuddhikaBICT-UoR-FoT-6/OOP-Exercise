@@ -5,9 +5,9 @@ namespace PizzaFactory.API.Services;
 
 public interface IOrderService
 {
-    Guid CreateOrder(string? customerName);
-    void AddPizza(Guid orderId, AddPizzaRequest request);
-    void ApplyCoupon(Guid orderId, ApplyCouponRequest request);
-    OrderResponse GetOrder(Guid orderId);
-    OrderResponse Checkout(Guid orderId);
+    Task<Guid> CreateOrderAsync(string? customerName);
+    Task AddPizzaAsync(Guid orderId, AddPizzaRequest request);
+    Task ApplyCouponAsync(Guid orderId, ApplyCouponRequest request);
+    Task<OrderResponse> GetOrderAsync(Guid orderId);
+    Task<OrderResponse> CheckoutAsync(Guid orderId);
 }

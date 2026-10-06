@@ -19,9 +19,9 @@ public class OrdersController : ControllerBase
     // POST api/orders
     [HttpPost]
     [ProducesResponseType(typeof(object), StatusCodes.Status201Created)]
-    public IActionResult CreateOrder([FromBody] CreateOrderRequest request)
+    public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
     {
-        var id = _orderService.CreateOrder(request.CustomerName);
+        var id = await _orderService.CreateOrderAsync(request.CustomerName);
         return CreatedAtAction(nameof(GetOrder), new { id }, new { orderId = id });
     }
 
@@ -29,11 +29,11 @@ public class OrdersController : ControllerBase
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(OrderResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult GetOrder(Guid id)
+    public async Task<IActionResult> GetOrder(Guid id)
     {
         try
         {
-            return Ok(_orderService.GetOrder(id));
+            return Ok(await _orderService.GetOrderAsync(id));
         }
         catch (KeyNotFoundException ex)
         {
@@ -45,11 +45,11 @@ public class OrdersController : ControllerBase
     [HttpPost("{id:guid}/pizzas")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult AddPizza(Guid id, [FromBody] AddPizzaRequest request)
+    public async Task<IActionResult> AddPizza(Guid id, [FromBody] AddPizzaRequest request)
     {
         try
         {
-            _orderService.AddPizza(id, request);
+            await _orderService.AddPizzaAsync(id, request);
             return NoContent();
         }
         catch (KeyNotFoundException ex)
@@ -62,11 +62,11 @@ public class OrdersController : ControllerBase
     [HttpPost("{id:guid}/coupon")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult ApplyCoupon(Guid id, [FromBody] ApplyCouponRequest request)
+    public async Task<IActionResult> ApplyCoupon(Guid id, [FromBody] ApplyCouponRequest request)
     {
         try
         {
-            _orderService.ApplyCoupon(id, request);
+            await _orderService.ApplyCouponAsync(id, request);
             return NoContent();
         }
         catch (KeyNotFoundException ex)
@@ -79,11 +79,11 @@ public class OrdersController : ControllerBase
     [HttpGet("{id:guid}/checkout")]
     [ProducesResponseType(typeof(OrderResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult Checkout(Guid id)
+    public async Task<IActionResult> Checkout(Guid id)
     {
         try
         {
-            return Ok(_orderService.Checkout(id));
+            return Ok(await _orderService.CheckoutAsync(id));
         }
         catch (KeyNotFoundException ex)
         {
