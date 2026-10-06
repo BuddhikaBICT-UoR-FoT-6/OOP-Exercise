@@ -13,6 +13,6 @@ public static class ToppingFactory{
         ToppingType.Cheese => new CheeseTopping(name),
         ToppingType.Ham => new HamTopping(name),
         ToppingType.Pepperoni => new PepperoniTopping(name),
-        _=> throw new ArgumentOutOfRangeException(nameof(type), $"Unknown topping type: {type}");
+        _ => throw new ArgumentOutOfRangeException(nameof(type), $"Unknown topping type: {type}")
     };
 }

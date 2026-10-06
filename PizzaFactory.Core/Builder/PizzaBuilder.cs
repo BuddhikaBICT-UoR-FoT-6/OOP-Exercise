@@ -1,5 +1,6 @@
-using PizzaFactory.Core.Factory;
 using PizzaFactory.Core.Models;
+using PF = PizzaFactory.Core.Factory.PizzaFactory;
+using TF = PizzaFactory.Core.Factory.ToppingFactory;
 
 namespace PizzaFactory.Core.Builder;
 
@@ -32,11 +33,11 @@ public class PizzaBuilder : IPizzaBuilder {
             throw new InvalidOperationException("Pizza size must be set before calling Build()");
 
         // Creates the pizza using the factory
-        var pizza = PizzaFactory.Create(_size);
+        var pizza = PF.Create(_size);
 
         // Adds the toppings to the pizza using the factory
         foreach(var (type, name) in _toppings)
-            pizza.AddTopping(ToppingFactory.Create(type, name));
+            pizza.AddTopping(TF.Create(type, name));
 
         return pizza;
     }
